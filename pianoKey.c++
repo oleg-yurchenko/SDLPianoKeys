@@ -4,7 +4,6 @@
 #include<SDL2/SDL_ttf.h>
 #include<SDL2/SDL_mixer.h>
 #include<thread>
-#include<future>
 #include"SDL_extra.h"
 #include"pianoKey.h"
 
@@ -67,98 +66,91 @@ void PianoKey::playNote(Mix_Chunk* note){
     Mix_PlayChannel(-1, note, 0);
 }
 
-void playThreadedNote(Mix_Chunk* note){
+void playThreadedNote(Mix_Chunk* note, SDL_Event* event){
     Mix_PlayChannel(-1, note, 0);
 }
 
-void threadedHandleKeyDown(SDL_Event* event, std::promise<bool>* promise){
-    while(SDL_PollEvent(event)!=0){
-        if(event->type == SDL_MOUSEBUTTONUP){
-            promise->set_value_at_thread_exit(false);
-        }
-    }
-    promise->set_value_at_thread_exit(true);
-}
-
 void PianoKey::handleEvent(SDL_Event* event, Mix_Chunk* note, SDL_Point** points){
-    //If mouse event happened
-    if(event->type == SDL_MOUSEMOTION || event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP){
-        //Get mouse position
-        int x, y;
-        SDL_GetMouseState(&x, &y);
+    //Get mouse position
+    int x, y;
+    SDL_GetMouseState(&x, &y);
 
-        //checks if mouse is inside button
-        bool inside = true;
+    //checks if mouse is inside button
+    bool inside = true;
 
-        if(x > xPos + KEY_WIDTH)
-            inside = false;
+    if(x > xPos + KEY_WIDTH)
+        inside = false;
         
-        if(x < xPos) 
-            inside = false;
+    if(x < xPos) 
+        inside = false;
         
-        if(y > yPos + KEY_HEIGHT)
-            inside = false;
+    if(y > yPos + KEY_HEIGHT)
+        inside = false;
         
-        if(y < yPos)
-            inside = false;
+    if(y < yPos)
+        inside = false;
 
-        if(type == 'w'){
-            std::vector<SDL_Point*> collision = detectCollision(points);
-            if(collision.size()>0){
-                if(y<350){
-                    if(collision.size()>1){
-                        for(size_t i{0}; i<collision.size(); ++i){
-                            if(!(x>collision[i]->x+67 || x<collision[i]->x)){
-                                inside = false;
-                            }
-                            if(!(x<collision[i]->x+67 || x>collision[i]->x))
-                                inside = false;
-                        }
-                    } else{
-                        if(!(x>collision[0]->x+67 || x<collision[0]->x))
+    if(this->type == 'w'){
+        std::vector<SDL_Point*> collision = detectCollision(points);
+        if(collision.size()>0){
+            if(y<350){
+                if(collision.size()>1){
+                    for(size_t i{0}; i<collision.size(); ++i){
+                        if(!(x>collision[i]->x+67 || x<collision[i]->x)){
                             inside = false;
+                        }
+                        if(!(x<collision[i]->x+67 || x>collision[i]->x))
+                                inside = false;
                     }
+                } else{
+                    if(!(x>collision[0]->x+67 || x<collision[0]->x))
+                            inside = false;
                 }
             }
         }
+    }
         
-        if(!inside){
-            mTexture.setColor(mColor.r, mColor.g, mColor.b);
-        } else {
-            bool noteHeld = false;
-            switch(event->type){
-                case SDL_MOUSEMOTION:
-                    if(type == 'w')
-                        mTexture.setColor(mColor.r-52, mColor.g-52, mColor.b-52);
-                    if(type == 'b')
-                        mTexture.setColor(mColor.r-10, mColor.g-10, mColor.b-10);
-                    break;
+    if(!inside){
+        mTexture.setColor(mColor.r, mColor.g, mColor.b);
+    } else {
+        std::vector<bool> keyBuffer = {false, false, false};
+        switch(event->type){
+            case SDL_MOUSEMOTION:
+                keyBuffer[0] = true;
+                break;
 
-                case SDL_MOUSEBUTTONDOWN:
-                    if(type == 'w')
-                        mTexture.setColor(mColor.r-200, mColor.g-200, mColor.b-200);
-                    if(type == 'b')
-                        mTexture.setColor(mColor.r-15, mColor.g-15, mColor.b-15);
-                    //this->playNote(note);
-                    noteHeld = true;
-                    break;
+            case SDL_MOUSEBUTTONDOWN:
+                keyBuffer[1] = true;
+                break;
 
-                case SDL_MOUSEBUTTONUP:
-                    SDL_Delay(100);
-                    mTexture.setColor(mColor.r, mColor.g, mColor.b);
-                    noteHeld = false;
-                    break;
+            case SDL_MOUSEBUTTONUP:
+                keyBuffer[2] = true;
+                break;
                 
-                default:
-                    mTexture.setColor(mColor.r, mColor.g, mColor.b);
-                    break;
-            }
-            while(noteHeld){
-                //this->playNote(note);
-                std::thread threadedNotePlayer(playThreadedNote, note);
-                //noteHeld = this->handleKeyDown(event);
-                threadedNotePlayer.join();
-            }
+            default:
+                mTexture.setColor(mColor.r, mColor.g, mColor.b);
+                break;
+        }
+        if(keyBuffer[0]){
+            if(type == 'w')
+                mTexture.setColor(mColor.r-52, mColor.g-52, mColor.b-52);
+            if(type == 'b')
+                mTexture.setColor(mColor.r-10, mColor.g-10, mColor.b-10);
+            keyBuffer[0] = false;
+        }
+        if(keyBuffer[1]){
+            if(type == 'w')
+                mTexture.setColor(mColor.r-200, mColor.g-200, mColor.b-200);
+            if(type == 'b')
+                mTexture.setColor(mColor.r-15, mColor.g-15, mColor.b-15);
+            std::thread threadedNotePlayer(playThreadedNote, note, event);
+            threadedNotePlayer.join();
+            //this->playNote(note);
+            keyBuffer[1] = false;
+        }
+        if(keyBuffer[2]){
+            mTexture.setColor(mColor.r, mColor.g, mColor.b);
+            keyBuffer[2] = false;
         }
     }
 }
